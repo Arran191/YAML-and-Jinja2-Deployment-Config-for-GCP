@@ -1,0 +1,48 @@
+# ref https://cloud.google.com/deployment-manager/docs/configuration/templates/using-schemas
+
+info:
+  title: Instance template schema
+  author: Arran191
+  description: Creates a template for an instance group.
+  version: 1.0
+
+imports:
+- path: instance_template.jinja # Must be a relative path
+
+required:
+- name
+- network
+- subnetwork
+- serviceAccountID
+
+properties:
+  name:
+    type: string
+    description: Name of the instanse.
+
+  machineType:
+    type: string
+    description: Define the machice type you want to create
+    default: g1-small
+
+  tagitems:
+    type: array
+    description: List an array of tag items you wish to add to this instance.
+
+  network:
+    type: string
+    description: Network for the instance. 
+
+
+  subnetwork:
+    type: string
+    description: The subnetwork of a VPC network.
+ 
+
+  serviceAccountID:
+    type: string
+    description: The subnetwork of a VPC network.
+
+  scopes:
+    type: array
+    description: List the scope of permissions 

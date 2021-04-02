@@ -1,0 +1,71 @@
+# ref https://cloud.google.com/deployment-manager/docs/configuration/templates/using-schemas
+
+info:
+  title: SQL-Database-Instance-Template
+  author: Arran191
+  description: Creates a static database instance  with one or two databases. 
+  version: 1.0
+
+imports:
+- path: create_sql_instance.jinja # Must be a relative path
+
+required:
+- name
+- region
+- diskType
+- rootuser
+- data_base_1
+
+properties:
+  name:
+    type: string
+    description: Name of the database instanse.
+
+  region:
+    type: string
+    description: Defines a region to deploy the instanse to.
+    default: Europe-West2
+
+  diskType:
+    type: string
+    description: Defines what disk type you want such as PD-persistant
+
+    default: PD_HDD
+
+  tier:
+    type: string
+    description: Defines what type of machine you want the database to be hosted on.
+    default: db-n1-standard-1
+
+  data_base_1:
+    type: string
+    description: The database name that will be hosted on the instance.
+    default: db-1
+
+  createSecondDatabase:
+    type: object
+    description: Use this object if you want to define a second database
+    required:
+    - data_base_2
+    properties:
+      data_base_2:
+        type: string
+        description: Name of the second database
+        default: db-2
+
+  rootuser:
+    type: object
+    description: Defines a root user that will be able to access the database
+    required:
+    - name
+    - password
+
+    properties:
+      name:
+        type: string
+        description: User name for the root user
+        default: root
+      password:
+        type: string
+        description: password for the root user
+        default: password

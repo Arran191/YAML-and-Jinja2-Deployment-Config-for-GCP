@@ -1,0 +1,49 @@
+#ref https://cloud.google.com/deployment-manager/docs/create-advanced-http-load-balanced-deployment
+
+resources:
+{% set instance_group_name = env["name"] %}
+
+  - name: {{ instance_group_name }}
+    type: compute.v1.regionInstanceGroupManager
+    properties:
+      region: {{ properties["region"] }}
+      distributionPolicy:
+        zones:
+        {%for zone in properties["zones"] %}
+        - zone: {{"projects/" +  env["project"]  + "/zones/" + zone }}
+        {%endfor%}
+      baseInstanceName:  {{ properties["baseInstanceName"] }}
+      targetSize:  {{ properties["targetSize"] }}
+      instanceTemplate: {{ properties["instanceTemplate"] }}
+      network: {{ properties["network"] }}
+      namedPorts:
+      - name: http
+        port: 80
+
+        
+
+# If this template was to be re-used, you may not want to specify an autoscaler, so you have the open of passing in false and this will stop it from being created
+{% if properties['autoscale'] %}
+  - name: {{instance_group_name }}-autoscaler
+    type: compute.v1.regionAutoscalers 
+    properties:
+      target: $(ref.{{ instance_group_name }}.selfLink)
+      region: {{ properties["region"] }}
+      autoscalingPolicy:
+        minNumReplicas: 2
+        maxNumReplicas: 10
+        scaleDownControl:
+          timeWindowSec: 180
+          maxScaledDownReplicas:
+            percent: 70
+        scaleInControl:
+          timeWindowSec: 180  
+          maxScaledInReplicas:
+            percent: 70
+          coolDownPeriodSec: 180   
+          cpuUtilization:
+            utilizationTarget:0.75 # Always keep CPUs at 75% utilization before upscaling.
+    metadata:
+        dependsOn:
+        - {{ instance_group_name }}
+{% endif %}

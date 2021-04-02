@@ -1,0 +1,74 @@
+# ref https://cloud.google.com/deployment-manager/docs/configuration/templates/using-schemas
+
+info:
+  title: Instance Groups
+  author: Arran191
+  description: Create an instance group through an instance template.
+  version: 1.0
+
+imports:
+- path: InstanceGroups.jinja 
+
+required:
+- name
+- targetSize
+- region
+- instanceTemplate
+- network
+
+properties:
+  name:
+    type: string
+    description: Name of the instance group.
+
+  region:
+    type: string
+    description: Name of the region you want to deploy the instance group to.
+    default: europe-west2
+
+  zones:
+    type: array
+    description: Name of the zones you want to deploy across. 
+    default: [europe-west2-a,europe-west2-b, europe-west2-c]
+
+  baseInstanceName:
+    type: string
+    description: Name of the zones you want to deploy across. 
+
+  instanceTemplate:
+    type: string
+    description: A template to create VMs off. 
+
+  targetSize:
+    type: integer
+    description: The amount of instances you want to create.
+
+  distributionPolicy:
+    type: object
+    description: Define the zones in which you want the managed instances to be across.
+    required:
+    - zones
+    properties:
+      zones:
+        type: array
+        description: An array of zones in which to distribute across.
+        default: [europe-west2-a,europe-west2-b, europe-west2-c]
+
+  namedPorts:
+    type: object
+    description: This incidcates that a service is availiable on all instances of the group. It is used by HTTP loadbalancer. 
+    required:
+    - name
+    - port
+    properties:
+      name:
+        type: string
+        description: name of the protocol
+      port: 
+        type: integer
+        description: Port number.
+
+  autoscale:
+    type: boolean
+    description: Defines if autoscaling should be on or off.
+    default: false

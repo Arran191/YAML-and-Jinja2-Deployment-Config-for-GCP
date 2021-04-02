@@ -1,0 +1,31 @@
+# ref: https://cloud.google.com/storage/docs/locations
+# ref: https://cloud.google.com/storage/docs/storage-classes
+# ref: https://cloud.google.com/storage/docs/json_api/v1/buckets
+
+resources:
+
+- name: {{env["name"]}}-basebucket-serviceaccount
+  type: iam.v1.serviceAccount
+  properties:
+    accountId: {{env["name"]}}-basebucket-svc
+    displayName: {{env["name"]}}-basebucket-svc
+- name: {{env["name"]}}-basebucket-svc-key
+  type: iam.v1.serviceAccounts.key
+  properties:
+    parent: $(ref.{{env["name"]}}-basebucket-serviceaccount.name)
+
+# Attempts to keep the name unqiue by using the deployment name
+- name: {{env["name"]}}-{{env["deployment"]}}-storagebucket
+  type: storage.v1.bucket
+  properties:
+    storageClass:  {{ properties["storageClass"] }}
+    location: {{ properties["location"] }}
+    versioning:
+      # Version this bucket to allow for backups.
+      enabled: true
+    lifecycle:
+      rule:
+      - action:
+          type: Delete
+        condition:
+          age: 365

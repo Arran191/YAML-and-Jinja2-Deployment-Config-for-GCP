@@ -1,0 +1,13 @@
+# Ref: https://cloud.google.com/iam/docs/overview
+# Ref: https://cloud.google.com/iam/docs/service-accounts
+# Ref: https://cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts
+# Ref: https://github.com/GoogleCloudPlatform/deploymentmanager-samples/tree/master/examples/v2/iam/jinja
+
+# Service account allows you to identify what the instance which API requests can be ran.
+
+resources:
+- name: {{ env['name'] }}
+  type: iam.v1.serviceAccount
+  properties:
+    accountId: {{ env['name'] }}
+    displayName: serviceAccount-{{ env['name'] }}

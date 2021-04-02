@@ -1,0 +1,45 @@
+# ref https://cloud.google.com/deployment-manager/docs/configuration/templates/using-schemas
+
+info:
+  title: Firewall Template
+  author: Arran191
+  description: Creates basic firewall rules with the option of IMCP rule. 
+  version: 1.0
+
+imports:
+- path: firewall_template.jinja 
+
+required:
+- name
+- network
+
+
+properties:
+
+  Createicmp:
+    type: object
+    description: Allows you to create a ICMP for selected sourceRanges.
+    required:
+    - sourceRanges
+    properties:
+      sourceRanges:
+        type: array
+        description: Use this property to define the IP ranges you want this firewall rule to apply to.
+
+  name:
+    type: string
+    description: Name of the database instanse.    
+
+  network:
+    type: string
+    description: URL of VPC network created.
+
+  IPProtocol:
+    type: string
+    description: URL of VPC network created.
+    default: TCP
+  
+  ports:
+    type: array
+    description: Define the ports you want to open
+    default: ["80"]

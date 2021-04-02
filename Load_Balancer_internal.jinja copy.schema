@@ -1,0 +1,34 @@
+# ref https://cloud.google.com/deployment-manager/docs/configuration/templates/using-schemas
+
+info:
+  title: Load-Balancer-internal schema
+  author: Arran Banks
+  description: Creates a internal load balancer.
+  version: 1.0
+
+imports:
+- path: Load_Balancer_internal.jinja # Must be a relative path
+
+required:
+- name
+- instanceGroup
+- region
+- Subnetwork
+- network
+
+properties:
+  name:
+    type: string
+    description: Name of your internal load balancer. Any resources created will also have this value in the name.
+
+  region:
+    type: string
+    description: Name of the region you want to deploy the internal load balancer to.
+
+  Subnetwork:
+    type: string
+    description: URL of the Subnetwork you wish to attach this Load Balancer to.
+
+  network:
+    type: string
+    description: VPC network this load balancer will belong to. 

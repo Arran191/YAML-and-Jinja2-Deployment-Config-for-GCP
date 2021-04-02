@@ -1,0 +1,29 @@
+resources:
+- name: firewall-{{ env["name"] }}
+  type: compute.v1.firewall
+  properties:
+    network: {{ properties["network"] }}
+    targetTags: {{ properties["sourceTag"] }}
+    allowed:
+    - IPProtocol: {{ properties["IPProtocol"] }}
+      ports: {{ properties["ports"] }}
+
+
+
+
+# Only want to create ICMP Protocol once, so if Creaticmp = false then this wouldn't execute. This allows you to reuse the template.
+{% if properties['Createicmp'] %}
+#Seperate rule to allow ICMP to allow internal traffic
+- name: firewall-motorway-allow-internal
+  type: compute.v1.firewall
+  properties:
+    network: {{ properties["network"] }}
+    sourceRanges: {{ properties['Createicmp']['sourceRanges'] }}
+    targetTags: {{ properties['Createicmp']["sourceTag"] }}
+    allowed:
+    - IPProtocol: TCP
+      ports: ["0-65535"]
+    - IPProtocol: UDP
+      ports: ["0-65535"]
+    - IPProtocol: ICMP
+{% endif %}

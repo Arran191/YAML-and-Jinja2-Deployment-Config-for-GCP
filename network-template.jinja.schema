@@ -1,0 +1,42 @@
+# ref https://cloud.google.com/deployment-manager/docs/configuration/templates/using-schemas
+
+info:
+  title: Networking Template
+  author: Arran191
+  description: Creates a VPC network with several subnets 
+  version: 1.0
+
+imports:
+- path: network-template.jinja # Must be a relative path
+
+required:
+- subnetworks
+
+properties:
+  name:
+    type: string
+    description: Name of the network.
+    default: vpc-network
+    
+  subnetworks:
+    type: array
+    description: Define the subnets you want to 
+
+  subnet:
+    type: object
+    description: Define a new subnet from the subnetwork array
+    required:
+    - ipCidrRange
+    - network
+    - region
+    
+    properties:
+      ipCidrRange:
+        type: string
+        description: Defines the IP range of which the subnet 
+      network:
+        type: string
+        description: Defines the network which the subnet is under
+      region:
+        type: string
+        description: Defines the region where the subnet is based       

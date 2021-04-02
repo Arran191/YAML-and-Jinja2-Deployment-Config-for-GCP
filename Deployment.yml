@@ -1,0 +1,280 @@
+imports:
+  - path: firewall_template.jinja
+    name: firewall_template.jinja
+  - path: create_sql_instance.jinja
+    name: create_sql_instance.jinja
+  - path: IAM_Policy.jinja
+    name: IAM_Policy.jinja
+  - path: InstanceGroups.jinja
+    name: InstanceGroups.jinja
+  - path: instance_template.jinja
+    name: instance_template.jinja
+  - path: network-template.jinja
+    name: network_template.jinja
+  - path: Load_Balancer_external.jinja
+    name: Load_Balancer_external.jinja
+  - path: bucket_template.jinja
+    name: bucket_template.jinja 
+  - path: Load_Balancer_internal.jinja
+    name: Load_Balancer_internal.jinja 
+# This .yml file deploys my solution to the problem given by a client. It is spread across two regions, Europe and the UK - all are under the same VPC network but are under septate 
+# subnets. They are mostly clones from one another 
+
+resources:
+  
+ # ----------- VPC network setup -------------
+
+# Creating a single VPC global network as it is explained that the company works under both Europe and the UK. Initially thought that a shared VPC network may have been more appropriate
+# however looking at a few diagrams online, this seemed to be the best approach for smaller scale systems. 
+
+  - name: motorway-network
+    type: network_template.jinja
+    properties:
+      subnetworks: [europe-west2-subnet, europe-west4-subnet]
+      europe-west2-subnet:
+        ipCidrRange: 10.0.0.0/16
+        region: europe-west2
+      europe-west4-subnet:
+        ipCidrRange: 10.10.0.0/16
+        region: europe-west4   
+
+
+
+ # ----------- Firewall rules -------------
+# These firewall rules will allow for communication.
+
+  # Create firewall rule to allow ports 80 and 445 which are used for HTTP(S). This also is used for health checks and proxy for the external load balancer too.
+  - name: motorway-allow-http-https
+    type: firewall_template.jinja
+    properties:
+      network: $(ref.motorway-network.selfLink)
+      IPProtocol: TCP
+      ports:  ["80","443"]
+      sourceTag: ["http"]
+      # Defines objet to firewall rule for icmp to allow for cross-communication between internal VMs.
+      Createicmp: 
+        switch: true
+        sourceRanges: ["10.0.0.0/16","10.10.0.0/16"]
+        sourceTag: ["icmp"]
+
+    # This is to allow engineers to SSH into the linux machines in order to configure them to suit the businesses' needs. 
+  - name: motorway-allow-ssh
+    type: firewall_template.jinja
+    properties:
+      network: $(ref.motorway-network.selfLink)
+      IPProtocol: TCP
+      ports:  ["22"]
+      sourceTag: ["ssh"]
+
+
+ # ----------- SQL Storage deployment -------------
+
+# Set up SQL instance for structured data such as the sensor & display data. This is based on the assumption that the client's data is structured such as sensor data reads in licence plates
+# and the display data includes pre-defined display messages.
+
+# Template will deploy a single  Cloud SQL instance with two databases, one for sensor and one for display data. 
+# A root user is created to allow base access which would be done via a web or app server.
+# This database instance would be interfaced from an applicable server e.g. Web or App server.
+
+  - name: sql-deployment
+    type: create_sql_instance.jinja
+    properties:
+      region: europe-west2
+      tier: db-custom-1-3840
+      data_base_1: sensor_data-db
+      storageAutoResize: true
+      # Starts at a base of 10gb for the database but is scalable up to 500gb which should be more than amble for the data described. 
+      storageAutoResizeLimit: 500
+      # In this array you declare all the databases you want to create.
+      createNewDatabase: [display_data-db, camera_data-db]
+      # Now you create the databases individually 
+      display_data-db: 
+        name: display_data-db
+        databaseVersion: POSTGRES_11
+        previousDatabase: sensor_data-db
+      camera_data-db: 
+        name: camera_data-db
+        # Postgres allows for object data such as images to be stored in them, meaning the client would be able to store their data inside a single instance.
+        databaseVersion: POSTGRES_11
+        # Stops Deployment manager from creating databases co-currently which causes an error. 
+        previousDatabase: display_data-db
+      #Set high availability to mean that if europe-west2 was to go down, it would failover to another region.
+      availabilityType: REGIONAL
+      # Defines the preferred zone to store the instance. Chose London as they are based in the UK. 
+      prefZone: europe-west2-c
+      # SSD to allow for quicker read-write time.
+      diskType: PD_SSD
+      # Enable backup of the instance, kept outside all main regions for redundancy. 
+      enableBackup: true
+      locationBackup: europe-west3 
+      networkLink: $(ref.motorway-network.selfLink)
+      Subnetwork: $(ref.europe-west2-subnet.selfLink)
+      # Create a root user to allow engineers to modify the database when they use the service via a host. This would be changed by the client once their system is set-up.
+      rootuser:
+        name: root
+        password: supersecurepassword123
+
+
+  # ----------- Service account  deployment -------------
+
+  # Service accounts are not user accounts. They are used to restrict VMs from using GCP services such as Compute or cloud SQL. 
+
+  # This creates a basic-access VM used for Web Servers, this denys access to most computing services for security resons. 
+  - name: basic-access
+    type: IAM_Policy.jinja
+
+
+  # ----------- Instance-template creation -------------
+
+# > Web Server Tier - This will be used as a front-end application. It will receive and send data.
+
+# Create an instance template for Web-Server VMs. 
+  - name: web-server-template-west2
+    type: instance_template.jinja
+    properties:
+      # Google Recommends going for a N2-Standard for general and web applications. Started with small decided CPUs. An autoscaler will be attached later to scale should demand require.
+      machineType: n2-standard-2
+      # Internal ip addresses will be dynamically assigned via the instance group by using the subnet 10.0.0.0/16
+      Network: $(ref.motorway-network.selfLink)
+      Subnetwork: $(ref.europe-west2-subnet.selfLink)
+      # These tags are defined further up to allow firewall rules.
+      tagItems: ["http", "ssh", "icmp"]
+      # Choose an SSD to be able to handle all the requests coming in faster.
+
+      # Defines the permissions you want to authorize. 
+# Create another 2 web-server VMs but for the europe region. Later a load balancer will check what region you are at and distribute traffic to the nearest web-server.
+  - name: web-server-template-west4
+    type: instance_template.jinja
+    properties:
+      machineType: n2-standard-2
+      # Internal ip addresses will be dynamically assigned via the instance group by using the subnet 10.10.0.0/16
+      Network: $(ref.motorway-network.selfLink)
+      Subnetwork: $(ref.europe-west4-subnet.selfLink)
+      # Apply firewall rules to this VM instance. 
+      tagItems: ["http", "ssh", "icmp"]
+
+# >> App Server Tier - This tier would be used to run any algorithms required on smart motorways. Again they are across mutli-regions to allow for faster delivery. 
+
+  - name: app-server-template-west2
+    type: instance_template.jinja
+    properties:
+      machineType: n2-standard-8
+      # Internal ip addresses will be dynamically assigned via the instance group by using the subnet 10.10.0.0/16
+      Network: $(ref.motorway-network.selfLink)
+      Subnetwork: $(ref.europe-west2-subnet.selfLink)
+      # Apply firewall rules to this VM instance. 
+      tagItems: ["http", "ssh", "icmp"]
+
+
+  - name: app-server-template-west4
+    type: instance_template.jinja
+    properties:
+      machineType: n2-standard-8
+      # Internal ip addresses will be dynamically assigned via the instance group by using the subnet 10.10.0.0/16
+      Network: $(ref.motorway-network.selfLink)
+      Subnetwork: $(ref.europe-west4-subnet.selfLink)
+      # Apply firewall rules to this VM instance. 
+      tagItems: ["http", "ssh", "icmp"]
+
+
+ # ----------- Instance-Group & Auto Scaler creation  -------------
+
+# Due to the topology of the network, there are two instance groups per a tier. This allows the external load balancer to determine where to send the data as the instance 
+# groups are based on region and zones.
+
+# Due to the company being a small to medium size enterprise, 3VMs with 8 cores each should be enough to handle incoming traffic. Should this not be the case an autoscaler is created
+# which can upscale and downscale as required.
+
+# >> Web Server creation. Create Three VMS.
+  - name: web-server-uk-instance-group
+    type: InstanceGroups.jinja
+    properties:
+      instanceTemplate: $(ref.web-server-template-west2.selfLink)
+      region: europe-west2
+      # Any web servers should be deployed over the three zones, this will allow account for high-availability 
+      zones: [europe-west2-a,europe-west2-b, europe-west2-c]
+      baseInstanceName: websvr-tier-instance-uk
+      targetSize: 3
+      autoscale: true
+
+  - name: web-server-europe-instance-group
+    type: InstanceGroups.jinja
+    properties:
+      instanceTemplate: $(ref.web-server-template-west4.selfLink)
+      region: europe-west4
+      zones: [europe-west4-a,europe-west4-b, europe-west4-c]
+      baseInstanceName: websvr-tier-instance-europe
+      targetSize: 3
+      autoscale: true
+
+# >> App server creation. Two VMs per region.
+  - name: app-server-uk-instance-group
+    type: InstanceGroups.jinja
+    properties:
+      instanceTemplate: $(ref.app-server-template-west2.selfLink)
+      region: europe-west2
+      # Any web servers should be deployed over the three zones, this will allow account for high-availability 
+      zones: [europe-west2-a,europe-west2-b, europe-west2-c]
+      baseInstanceName: app-tier-instance-uk
+      targetSize: 2
+      autoscale: true
+
+  - name: app-server-europe-instance-group
+    type: InstanceGroups.jinja
+    properties:
+      instanceTemplate: $(ref.app-server-template-west4.selfLink)
+      region: europe-west4
+      zones: [europe-west4-a,europe-west4-b, europe-west4-c]
+      baseInstanceName: app-tier-instance-europe
+      targetSize: 2
+      autoscale: true
+
+
+ # ----------- Bucket Config   -------------
+# Created a bucket to allow for any additional object data that cannot be stored in the PostGre database. 
+
+  - name: smart-moterway
+    type: bucket_template.jinja
+    properties:
+      storageClass: MULTI_REGIONAL
+      location: EU
+
+
+  - name: bucket-backup
+    type: bucket_template.jinja
+    properties:
+      storageClass: COLDLINE
+      location: EUROPE-WEST2
+ # ----------- Load Balancer Config   -------------
+
+# External Load balancer to handle incoming traffic and distribute across relevant zones.
+# By using external HTTP(s) load balancer, it uses a global external IP address to form a route from a user to the closest instance group. 
+
+# When deploying the load balancer it takes about 10 minutes for the load balancer to start directing traffic. It must first wait for the health checks to come through, then 
+# it starts to work. 
+
+  - name: load_balancer_External
+    type: Load_Balancer_external.jinja
+    properties:
+      # Defines the instance groups you want to send traffic to.
+      instanceGroup: $(ref.web-server-uk-instance-group.instanceGroup)
+      instanceGroup2: $(ref.web-server-europe-instance-group.instanceGroup)
+
+  - name: load-balancer-internal-uk
+    type: Load_Balancer_internal.jinja
+    properties:
+      # Defines the instance groups you want to send traffic to.
+      instanceGroup: $(ref.app-server-uk-instance-group.instanceGroup)
+      region: europe-west2
+      Network: $(ref.motorway-network.selfLink)
+      Subnetwork: $(ref.europe-west2-subnet.selfLink)
+
+
+  - name: load-balancer-internal-europe
+    type: Load_Balancer_internal.jinja
+    properties:
+      # Defines the instance groups you want to send traffic to.
+      instanceGroup: $(ref.app-server-europe-instance-group.instanceGroup)
+      region: europe-west4
+      Network: $(ref.motorway-network.selfLink)
+      Subnetwork: $(ref.europe-west4-subnet.selfLink)

@@ -1,0 +1,30 @@
+# ref https://cloud.google.com/deployment-manager/docs/configuration/templates/using-schemas
+
+info:
+  title: Load Balancer external schema
+  author: Arran191
+  description: Allows you to deploy an external load balancer for two instance groups
+  version: 1.0
+
+imports:
+- path: Load_Balancer_external.jinja # Must be a relative path
+
+required:
+- name
+- instanceGroup
+- instanceGroup2
+
+
+properties:
+  name:
+    type: string
+    description: Name of your internal load balancer. Any resources created will also have this value in the name.
+
+  instanceGroup:
+    type: string
+    description: A managed instance group to deply to.
+
+  instanceGroup2:
+    type: string
+    description: A managed instance group to deply to.
+

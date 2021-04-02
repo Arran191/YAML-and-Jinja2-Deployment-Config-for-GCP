@@ -1,0 +1,45 @@
+#ref: https://codeblog.dotsandbrackets.com/internal-load-balancer/
+
+resources:
+  - name: {{env['name'] }}-static-ip
+    type: compute.v1.address
+    properties:
+      addressType: INTERNAL
+      region: {{ properties["region"] }} 
+      subnetwork: {{ properties["Subnetwork"] }} 
+
+  - name: {{env['name']}}-health-check
+    type: compute.v1.healthCheck
+    properties:
+      type: TCP
+      checkIntervalSec: 10 
+      healthyThreshold: 2
+      tcpHealthCheck:
+        port: 80
+        
+
+  - name: {{env['name']}}-backend-service
+    type: compute.v1.regionBackendService
+    properties:
+      region: {{ properties["region"] }} 
+      protocol: TCP
+      loadBalancingScheme: INTERNAL
+      backends:
+        - group: {{ properties["instanceGroup"] }}
+      healthChecks:
+        - $(ref.{{env['name']}}-health-check.selfLink)
+
+
+  - name: internal-regional-forwarding-rule-{{env['name']}}
+    type: compute.v1.forwardingRule
+    properties:
+      region: {{ properties["region"] }} 
+      ports:
+        - 80
+      loadBalancingScheme: INTERNAL
+      backendService: $(ref.{{env['name']}}-backend-service.selfLink)
+      network: {{ properties["Network"] }} 
+      subnetwork: {{ properties["Subnetwork"] }} 
+      IPAddress: $(ref.{{env['name'] }}-static-ip.selfLink)
+
+

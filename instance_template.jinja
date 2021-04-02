@@ -1,0 +1,57 @@
+# Ref: https://developers.google.com/identity/protocols/oauth2/scopes
+# Ref: https://cloud.google.com/compute/docs/reference/rest/v1/instances
+# Ref: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#relationship_between_versions_and_instancetemplate_properties_for_a_managed_instance_group
+
+imports:
+  - path: IAM_Policy.jinja
+    name: IAM_Policy.jinja
+
+
+
+resources:
+  - name: {{ env["name"] }}
+    type: compute.v1.instanceTemplate
+    properties:
+      project: {{ env["project"] }}
+      properties:
+        machineType: {{ properties["machineType"] }}
+        canIpForward: true
+        scheduling:
+          automaticRestart: true
+          onHostMaintenance: MIGRATE
+          preemptible: false
+        tags:
+          items:
+            - {{ properties["tagItems"] }}
+        disks:
+            # Create a boot disk of 10GB based of Debian image. By using Linux, it gives the client more flexability and increases security. 
+          - deviceName: boot
+            boot: true
+            autoDelete: true
+            mode: READ_WRITE
+            type: PERSISTENT
+            initializeParams:
+              diskSizeGb: 10
+              diskType: pd-standard
+              # This base image is for a boot disk, although I would suggest to the client that this be changed to their own custom image to allow for easy scaleability.
+              sourceImage: https://www.googleapis.com/compute/v1/projects/debian-cloud/global/images/debian-10-buster-v20201014
+        networkInterfaces:
+          - network: {{ properties["network"] }}
+            subnetwork: {{ properties["Subnetwork"] }}
+            accessConfigs:
+            - name: External NAT
+              type: ONE_TO_ONE_NAT   
+              networkTier: STANDARD      
+        metadata:
+            items:
+            - key: startup-script
+              value:  |
+                sudo apt-get update
+                sudo apt-get install apache2 -y
+                sudo service apache2 restart
+                echo "host:`hostname`" | sudo tee /var/www/html/index.html
+                
+
+          
+
+

@@ -1,0 +1,24 @@
+resources:
+{% set network_name = "$(ref." +  env["name"] + ".selfLink)" %}
+
+- name: {{env["name"]}}
+  type: compute.v1.network
+  properties:
+    autoCreateSubnetworks: false
+    #VPC network properties comes here
+
+
+
+{% for subnet in properties['subnetworks'] %}
+
+- name: {{ subnet }}
+  type: compute.v1.subnetwork
+  properties:
+    ipCidrRange: {{ properties[subnet]["ipCidrRange"] }}
+    network: {{ network_name }}
+    region: {{ properties[subnet]["region"] }}
+    metadata:
+        dependson:
+        - {{env["name"]}}
+
+{% endfor %}

@@ -1,0 +1,111 @@
+# Ref: https://stackoverflow.com/questions/57072940/google-deployment-manager-database-creation-fails 
+# Ref : https://github.com/GoogleCloudPlatform/deploymentmanager-samples/blob/master/examples/v2/cloudsql/cloudsql.jinja
+
+{% set deployment_name = env['deployment']  %}
+
+# Set instance name variable name to avoid HTTP error 409 which would cause the deployment to crash due to repeating SQL instance types, instance name is based off the deployment name.
+{% set instance_name =  env["name"] + '-' + deployment_name + '-instance'  %}
+
+
+resources:
+- name: {{env['name'] }}-static-ip
+  type: compute.v1.address
+  properties:
+    addressType: INTERNAL
+    region: {{ properties["region"] }} 
+    subnetwork: {{ properties["Subnetwork"] }} 
+
+- name: {{ instance_name }}
+  type: sqladmin.v1beta4.instance
+  properties:
+    backendType: SECOND_GEN
+    instanceType: CLOUD_SQL_INSTANCE
+    # Creating a POSTGRES database as this allows object data to be stored. E.g. camara data. 
+    databaseVersion: POSTGRES_11
+    region: {{ properties["region"] }}
+    settings:
+      # The type of machine you want the database instance to run on.
+      tier: {{ properties["tier"] }}
+      # Defines the availability type should this instance go down. By setting to regional, should that location become unavailable, 
+      # it allows the instance to move to new location.
+      availabilityType: {{ properties["availabilityType"] }}
+      # Allow increase to meet demands of busniess up to 100GB. Can be adjusted later if required.
+      storageAutoResizeLimit: {{ properties['storageAutoResizeLimit']}}
+      storageAutoResize: {{ properties['storageAutoResize']}}
+      # Should the DB server need to migrate, GCP will attmept to move it to it's prefered location.
+      locationPreference:
+        zone: {{ properties['prefZone']}}
+      # SSD to allow for quicker read-write time.
+      dataDiskType: {{ properties['diskType']}}
+      # Maintence window to be outside out general working hours. (On a Sunday). This means the VM should not shut down for maintance.
+      maintenanceWindow:
+        hour: 10
+        day: 7
+      # Backup configutation will allow the GCP to take a backup of the database, for redundancy this is stored in another region.
+      backupConfiguration:
+        binaryLogEnabled: false
+        enabled: {{ properties['enableBackup']}}
+        location: {{ properties['locationBackup']}}
+      IpConfiguration:
+        # Do not assign it a public IP address.
+        ipv4Enabled: False
+        # Put it on the VPC network and define the CIDRRange that is allowed to access it. 
+        privateNetwork: {{ properties["networkLink"] }}
+        authorizedNetworks: {{ properties["CIDRRange"] }}
+        ipAddresses: $(ref.{{env['name'] }}-static-ip.selfLink)
+
+
+
+# Create a single database as default. 
+- name: {{ properties["data_base_1"] }}
+  type: sqladmin.v1beta4.database
+  properties:
+    name: {{ properties["data_base_1"] }}
+    instance: $(ref.{{ instance_name }}.name)
+    charset: utf8
+
+
+
+
+# If a user wants to create more than once database, they must declare an array called 'createNewDatabase' with the names inside of it.
+{% if properties['createNewDatabase'] %}
+
+# Create a new database for each one in the array.
+{% for database in properties['createNewDatabase'] %}
+
+- name: {{ properties[database]["name"] }}
+  type: sqladmin.v1beta4.database
+  properties:
+    name:  {{ properties[database]["name"] }}
+    databaseVersion: {{ properties[database]["databaseVersion"] }}
+    instance: $(ref.{{ instance_name }}.name)
+    charset: utf8
+# Meta data 'dependsOn' stops the database from trying to create a database co-currently. The first database, previous database and datbase instance must be
+# created before creating the next one.
+  metadata:
+    dependsOn:
+    - {{ instance_name }}
+    - {{properties["data_base_1"]}}
+    - {{ properties[database]["previousDatabase"] }}
+{%endfor%}
+{%endif%}
+
+# Create root user for instance
+- name: {{ instance_name }}-db-root
+  type: sqladmin.v1beta4.user
+  properties:
+    name: {{ properties['rootuser']['name'] }}
+    host:  "{{ properties['rootuser']['host'] }}"
+    instance: $(ref.{{ instance_name }}.name)
+    password: {{ properties['rootuser']['password'] }}
+# Again this must only be created once all databases and instances have been created.
+  metadata:
+    dependsOn:
+    - {{ instance_name }}
+{% if properties['createNewDatabase'] %}
+{% for database in properties['createNewDatabase'] %}
+    - {{ properties[database]["name"] }}
+{% endfor %}
+{% else %}
+    - {{ properties["data_base_1"] }}
+{% endif %}
